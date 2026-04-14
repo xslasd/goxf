@@ -1,0 +1,29 @@
+goxf:
+  serviceName: examples
+  enableConsole: true
+  enableTrace: false
+  enableMetric: false
+  enableRegister: false
+  enablePprof: false
+jwt:
+  expiresAt: "12h"
+  signingKey: "your_secret_key_heresssssadaswqeq"
+logger:
+  default:
+    dir: "."
+    level: "debug"
+    maxSize: 1
+    maxAge: 1
+    maxBackup: 2
+    addCaller: true
+    callerSkip: 2
+    enableTimeLayout: true
+    async: false
+i18n:
+  default:
+    language: "zh"
+    path: "i18n"
+server:
+  gin:
+    default:
+      addr: ':8888'

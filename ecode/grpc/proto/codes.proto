@@ -1,0 +1,23 @@
+syntax = "proto3";
+package codes;
+option go_package = "../codes";
+service Codes {
+  rpc GetCodes(Empty) returns (CodesRes) {
+  }
+}
+
+message Empty {
+}
+
+message CodesRes {
+  repeated CodeInfo Rows = 1;
+}
+
+message CodeInfo {
+  int64 Code = 1;
+  string Message = 2;
+}
+
+message CodeValues{
+  repeated string  Values=1;
+}

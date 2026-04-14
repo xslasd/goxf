@@ -1,0 +1,12 @@
+goxf:
+  service_name: "delay-test"
+  enable_console: true
+
+logger:
+  default:
+    level: "debug"
+
+job:
+  delay_test:
+    queue_name: "delay_test"
+    worker_num: 1
