@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"strings"
+
+	"github.com/fatih/color"
 	"github.com/xslasd/goxf/log"
 	"github.com/xslasd/goxf/utils/xnet"
-	"strings"
 )
 
 type Server interface {
@@ -35,4 +38,9 @@ func BuildAddress(addr string) string {
 	}
 	ad[0] = ip.String()
 	return strings.Join(ad, ":")
+}
+
+func PrintRouteFunc(SrvName, httpMethod, absolutePath, handlerName string) {
+	str := fmt.Sprintf("%s %s", color.BlueString(httpMethod), color.YellowString(absolutePath))
+	log.Debugf("%s: %-30s --> %s", SrvName, str, color.GreenString(handlerName))
 }

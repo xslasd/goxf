@@ -3,7 +3,6 @@ package sgin
 import (
 	"net/http"
 
-	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/xslasd/goxf/application"
 	"github.com/xslasd/goxf/conf"
@@ -42,9 +41,13 @@ func NewGinServer(opts ...Option) (*Server, error) {
 	}
 	opt.config.Addr = server.BuildAddress(opt.config.Addr)
 	gin.SetMode(opt.mode)
-	gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
-		log.Debugf("%-15s %-60s --> %s (%d handlers)", color.BlueString(httpMethod), color.YellowString(absolutePath), color.GreenString(handlerName), nuHandlers)
+	gin.DebugPrintRouteFunc = nil
+	if opt.printRoute {
+		gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
+			server.PrintRouteFunc("gin."+opt.confName, httpMethod, absolutePath, handlerName)
+		}
 	}
+
 	engine := gin.New()
 	corsHandel := cors.New(opt.corsOptions)
 	engine.Use(func(ctx *gin.Context) {

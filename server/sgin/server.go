@@ -3,11 +3,9 @@ package sgin
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/xslasd/goxf/log"
 	"github.com/xslasd/goxf/server"
@@ -22,10 +20,6 @@ type Server struct {
 
 func (s *Server) Init() error {
 	if s.opts.enableConsole {
-		for _, route := range s.Engine.Routes() {
-			str := fmt.Sprintf("%s %s", color.BlueString(route.Method), color.YellowString(route.Path))
-			log.Debugf("gin.%s: %-30s --> %s", s.opts.confName, str, color.GreenString(route.Handler))
-		}
 		log.Debugf("gin.%s: cors option allowedOrigins[%s]", s.opts.confName, strings.Join(s.opts.corsOptions.AllowedOrigins, ","))
 		log.Debugf("gin.%s: cors option allowedMethods[%s]", s.opts.confName, strings.Join(s.opts.corsOptions.AllowedMethods, ","))
 		log.Debugf("gin.%s: cors option allowedHeaders[%s]", s.opts.confName, strings.Join(s.opts.corsOptions.AllowedHeaders, ","))
@@ -60,4 +54,8 @@ func (s *Server) Info() *server.ServiceInfo {
 		Address: s.opts.config.Addr,
 		Scheme:  "gin",
 	}
+}
+
+func (s *Server) PrintRouteFunc(httpMethod, absolutePath, handlerName string) {
+	server.PrintRouteFunc("gin."+s.opts.confName, httpMethod, absolutePath, handlerName)
 }

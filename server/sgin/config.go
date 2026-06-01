@@ -25,6 +25,7 @@ type srvOption struct {
 	confPrefix     string
 	confName       string
 	mode           string
+	printRoute     bool
 
 	//设置自定义路由
 	setRouteFn UseRouteFunc
@@ -96,6 +97,11 @@ func WithCorsOptions(option cors.Options) Option {
 		s.corsOptions = option
 	}
 }
+func WithPrintRoute(isPrint bool) Option {
+	return func(o *srvOption) {
+		o.printRoute = isPrint
+	}
+}
 
 // DefaultConfig ...
 func defaultConfig() *Config {
@@ -116,6 +122,7 @@ func defaultServerOption() *srvOption {
 		confName:       "default",
 		middleware:     []gin.HandlerFunc{},
 		mode:           gin.ReleaseMode,
+		printRoute:     true,
 		corsOptions:    cors.DefaultOptions(),
 	}
 }

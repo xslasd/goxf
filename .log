@@ -1,7 +1,0 @@
-{"lv":"warn","ts":"2026-04-14 10:36:11.822","caller":"log/api.go:82                   ","msg":"job queue use default config!"}
-{"lv":"info","ts":"2026-04-14 10:36:11.822","caller":"log/api.go:147                  ","msg":"job queue worker[default] start ok, workers: 1"}
-{"lv":"info","ts":"2026-04-14 10:36:11.822","caller":"log/api.go:72                   ","msg":"★★★ goxf start complete ★★★. block until done or return error."}
-{"lv":"debug","ts":"2026-04-14 10:36:11.822","caller":"log/api.go:77                   ","msg":"queue job finish","queue":"default","cost":"0.000"}
-{"lv":"debug","ts":"2026-04-14 10:36:16.824","caller":"log/api.go:77                   ","msg":"queue job finish","queue":"default","cost":"0.562"}
-{"lv":"info","ts":"2026-04-14 10:53:30.259","caller":"log/api.go:72                   ","msg":"received signal, starting to exit.","signal":"interrupt"}
-{"lv":"info","ts":"2026-04-14 10:53:30.259","caller":"log/api.go:147                  ","msg":"job queue worker[default] stop ok"}
