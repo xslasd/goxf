@@ -12,6 +12,7 @@ import (
 type manager struct {
 	data        map[string]map[string]string //Translating Data
 	creatorFunc conf.DataSourceCreatorFunc
+	unmarshal   conf.Unmarshal
 
 	language     string
 	path         string
@@ -30,6 +31,7 @@ func newManager(opt *options) (*manager, error) {
 		path:         opt.config.Path,
 		keyDelimiter: opt.keyDelimiter,
 		exts:         opt.config.Exts,
+		unmarshal:    opt.unmarshal,
 	}
 	err := m.loadConf()
 	if err != nil {
@@ -68,13 +70,18 @@ func (m *manager) loadConf() error {
 }
 func (m *manager) readConf(fileName string) (map[string]string, error) {
 	ds := fileconfsource.NewConfigSource(fileName, false)
-	content, err := ds.ReadConfig()
+	content, dsFormat, err := ds.ReadConfig()
 	if err != nil {
 		return nil, err
 	}
-	unmarshal, err := conf.ExtToUnmarshal(fileName)
-	if err != nil {
-		return nil, err
+
+	unmarshal := m.unmarshal
+	if unmarshal == nil && dsFormat != "" {
+		unmarshal = conf.ExtToUnmarshal(dsFormat)
+	}
+
+	if unmarshal == nil {
+		return nil, conf.UnmarshalInvalid
 	}
 	configuration := make(map[string]any)
 	err = unmarshal(content, &configuration)

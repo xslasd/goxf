@@ -1,0 +1,4 @@
+server:
+    gin:
+        default:
+            addr: :9999

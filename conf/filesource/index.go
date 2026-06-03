@@ -1,10 +1,8 @@
 package filesource
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,8 +10,6 @@ import (
 	"github.com/xslasd/goxf/conf"
 	"github.com/xslasd/goxf/utils/xfmt"
 )
-
-const Scheme = "file"
 
 type ConfigSource struct {
 	path        string
@@ -26,24 +22,8 @@ type ConfigSource struct {
 }
 
 func NewConfigSource(path string, watch bool) *ConfigSource {
-	// 处理 file:// 协议头
-	if strings.HasPrefix(path, "file://") {
-		if u, err := url.Parse(path); err == nil {
-			path = u.Path
-			// Windows 下 /D:/path -> D:/path
-			if len(path) > 2 && path[0] == '/' && path[2] == ':' {
-				path = path[1:]
-			}
-		}
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		absPath = path
-	}
-
 	ds := &ConfigSource{
-		path:        absPath,
+		path:        path,
 		notifyDelay: 5 * time.Second,
 		isWatch:     watch,
 	}
@@ -61,13 +41,13 @@ func (s *ConfigSource) SetDelay(d time.Duration) {
 	s.notifyDelay = d
 }
 
-func (s *ConfigSource) ReadConfig() ([]byte, error) {
+func (s *ConfigSource) ReadConfig() ([]byte, string, error) {
 	content, err := os.ReadFile(s.path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// 支持环境变量扩展
-	return []byte(os.ExpandEnv(string(content))), nil
+	return []byte(os.ExpandEnv(string(content))), filepath.Ext(s.path), nil
 }
 
 func (s *ConfigSource) Changed() <-chan struct{} {
@@ -154,7 +134,7 @@ func (s *ConfigSource) watch() {
 }
 
 func init() {
-	conf.Register(Scheme, func(configAddr string, isWatch bool) conf.ConfigSource {
+	conf.Register(conf.FileScheme, func(configAddr string, isWatch bool) conf.ConfigSource {
 		return NewConfigSource(configAddr, isWatch)
 	})
 }

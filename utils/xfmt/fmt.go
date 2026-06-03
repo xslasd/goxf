@@ -3,7 +3,6 @@ package xfmt
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ func Printf(format string, a ...any) {
 	buf.WriteString(fmt.Sprintf("%-40s", addShortCaller()))
 	buf.WriteString(format)
 	buf.WriteString("\n")
-	_, _ = fmt.Fprintf(os.Stdout, buf.String(), a...)
+	_, _ = fmt.Fprintf(color.Output, buf.String(), a...)
 }
 
 func addShortCaller() string {

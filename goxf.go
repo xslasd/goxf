@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,35 +72,10 @@ func (s *Service) initConfig() {
 	if !s.isWatchConf {
 		s.isWatchConf = flag.Bool("watch")
 	}
-	absPath, err := filepath.Abs(configAddr)
-	if err != nil {
-		panic(fmt.Errorf("get absolute path error:%w", err))
-	}
-
-	xfmt.Printf("goxf intends to read config from: %s", absPath)
-	conf.SetCryptFilePath(absPath)
-	provider, err := conf.NewDataSource(absPath, s.isWatchConf)
+	xfmt.Printf("goxf intends to read config from: %s", configAddr)
+	err := conf.NewSourceConf(configAddr, s.confUnmarshal, s.isWatchConf)
 	if err != nil {
 		panic(fmt.Errorf("create config data source error:%w", err))
-	}
-	if s.confUnmarshal == nil {
-		s.confUnmarshal, err = conf.ExtToUnmarshal(configAddr)
-		if err != nil {
-			xfmt.Printf("unsupported config unmarshal type: %s", filepath.Ext(configAddr))
-			os.Exit(1)
-		}
-	}
-	err = conf.LoadFromDataSource(provider, s.confUnmarshal)
-	if err != nil {
-		panic(err)
-	}
-	if s.isWatchConf {
-		hooks.Register(hooks.Stage_AfterStop, func() {
-			err = provider.Close()
-			if err != nil {
-				panic(err)
-			}
-		})
 	}
 }
 func (s *Service) loadBaseConfig() {

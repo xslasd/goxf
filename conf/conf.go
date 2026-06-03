@@ -9,9 +9,6 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	"github.com/xslasd/goxf/hooks"
-	"github.com/xslasd/goxf/log"
-	"github.com/xslasd/goxf/utils/gmsm/sm4"
 	"github.com/xslasd/goxf/utils/xcast"
 	"github.com/xslasd/goxf/utils/xmap"
 	"golang.org/x/term"
@@ -45,13 +42,13 @@ func (c *Conf) SetKeyDelimiter(delimiter string) {
 }
 
 func (c *Conf) LoadFromConfigSource(ds ConfigSource, unmarshal Unmarshal) error {
-	content, err := ds.ReadConfig()
+	content, dsFormat, err := ds.ReadConfig()
 	if err != nil {
 		return err
 	}
-	content, err = cryptConf(content, configCryptFilePath)
-	if err != nil {
-		return err
+
+	if unmarshal == nil && dsFormat != "" {
+		unmarshal = ExtToUnmarshal(dsFormat)
 	}
 
 	err = c.load(content, unmarshal)
@@ -60,8 +57,12 @@ func (c *Conf) LoadFromConfigSource(ds ConfigSource, unmarshal Unmarshal) error 
 	}
 	go func() {
 		for range ds.Changed() {
-			if content, err = ds.ReadConfig(); err == nil {
-				_ = c.load(content, unmarshal)
+			if content, dsFmt, err := ds.ReadConfig(); err == nil {
+				um := unmarshal
+				if um == nil && dsFmt != "" {
+					um = ExtToUnmarshal(dsFmt)
+				}
+				_ = c.load(content, um)
 			}
 		}
 	}()
@@ -197,75 +198,45 @@ func (c *Conf) UnmarshalKey(key string, rawVal any) error {
 	return mapstructure.Decode(value, rawVal)
 }
 
-func cryptConf(content []byte, dir string) ([]byte, error) {
-	isCryptConf := false
-	for _, arg := range os.Args {
-		if arg == "--crypt-conf" {
-			isCryptConf = true
-			break
+func verifyPassword(isEnc bool) bool {
+	if configPassword != "" {
+		vPassword := false
+		for _, arg := range os.Args {
+			if arg == "--crypt-conf" {
+				vPassword = true
+				break
+			}
 		}
-	}
-	if isCryptConf {
-		fmt.Println()
-		fmt.Print("Enter config password: ")
-		var pwd string
-		if term.IsTerminal(int(os.Stdin.Fd())) {
-			pwdBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if vPassword {
 			fmt.Println()
-			if err != nil {
-				fmt.Printf("Failed to read password: %v\n", err)
+			fmt.Print("Enter config password: ")
+			var pwd string
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				pwdBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Println()
+				if err != nil {
+					fmt.Printf("Failed to read password: %v\n", err)
+					os.Exit(1)
+				}
+				pwd = string(pwdBytes)
+			} else {
+				fmt.Scanln(&pwd)
+			}
+
+			if pwd == "" {
+				fmt.Println("Password cannot be empty")
 				os.Exit(1)
 			}
-			pwd = string(pwdBytes)
-		} else {
-			fmt.Scanln(&pwd)
-		}
-
-		if pwd == "" {
-			fmt.Println("Password cannot be empty")
-			os.Exit(1)
-		}
-		if pwd != configPassword {
-			fmt.Println("Password is not correct")
-			os.Exit(1)
-		}
-		var err error
-		var fbyte []byte
-		var fName string
-		var flog string
-		fbyte, err = sm4.Sm4DecryptFromHex([]byte(pwd), string(content))
-		if err == nil && len(fbyte) > 0 {
-			fName = dir + ".plain"
-			content = fbyte
-			os.WriteFile(fName, fbyte, 0666)
-			flog = "plaintext"
-		} else {
-			enc, errEnc := sm4.Sm4EncryptToHex([]byte(pwd), content)
-			if errEnc == nil {
-				fbyte = []byte(enc)
-				fName = dir + ".crypt"
-				os.WriteFile(fName, []byte(enc), 0666)
-				flog = "ciphertext"
-			} else {
-				fmt.Printf("Failed to encrypt: %v\n", errEnc)
+			if pwd != configPassword {
+				fmt.Println("Password is not correct")
 				os.Exit(1)
 			}
+			return true
 		}
-		hooks.Register(hooks.Stage_AfterRun, func() {
-			fmt.Println()
-			log.Warnf("Generated %s to: %s", flog, fName)
-			log.Warn("Attention: After editing the configuration file, please delete the plaintext configuration file!")
-		})
-
-	} else {
-		if configPassword != "" {
-			decrypted, err := sm4.Sm4DecryptFromHex([]byte(configPassword), string(content))
-			if err == nil && len(decrypted) > 0 {
-				content = decrypted
-			} else {
-				return nil, InvalidConfigData
-			}
+		if !isEnc {
+			fmt.Println("invalid config data decrypt failed")
+			os.Exit(1)
 		}
 	}
-	return content, nil
+	return false
 }

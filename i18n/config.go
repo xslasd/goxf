@@ -1,5 +1,7 @@
 package i18n
 
+import "github.com/xslasd/goxf/conf"
+
 type Config struct {
 	Language string
 	Path     string
@@ -11,6 +13,7 @@ type options struct {
 	confPrefix string
 	confName   string
 
+	unmarshal    conf.Unmarshal
 	keyDelimiter string
 }
 type Option func(*options)
@@ -18,6 +21,11 @@ type Option func(*options)
 func WithConfPrefix(prefix string) Option {
 	return func(o *options) {
 		o.confPrefix = prefix
+	}
+}
+func WithUnmarshal(unmarshal conf.Unmarshal) Option {
+	return func(o *options) {
+		o.unmarshal = unmarshal
 	}
 }
 

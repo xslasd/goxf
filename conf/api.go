@@ -1,23 +1,37 @@
 package conf
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
+
+	"github.com/BurntSushi/toml"
+	"gopkg.in/yaml.v3"
 )
 
 var defaultConfiguration = NewConf()
 
 var configPassword string
-var configCryptFilePath string
 
 func SetPassword(pwd string) {
 	configPassword = pwd
 }
-func SetCryptFilePath(path string) {
-	configCryptFilePath = path
-}
 
 func LoadFromDataSource(ds ConfigSource, unmarshal Unmarshal) error {
 	return defaultConfiguration.LoadFromConfigSource(ds, unmarshal)
+}
+
+// ExtToUnmarshal maps a file extension or type to its corresponding Unmarshal function.
+func ExtToUnmarshal(ext string) Unmarshal {
+	switch strings.ToLower(ext) {
+	case ".toml", "toml":
+		return toml.Unmarshal
+	case ".yaml", ".yml", "yaml", "yml":
+		return yaml.Unmarshal
+	case ".json", "json":
+		return json.Unmarshal
+	}
+	return nil
 }
 
 // SetWatcher set a func in a watcher with name of key

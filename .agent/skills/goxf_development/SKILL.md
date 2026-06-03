@@ -23,8 +23,12 @@ When working on `goxf`, AI agents and developers must strictly adhere to the fol
 - **原则**: Use `hooks.Register` (Stages: `BeforeLoadConfig`, `BeforeRun`, `BeforeStop`, `AfterStop`) to manage cross-module shutdown/startup sequences cleanly.
 
 ### 2. 配置中心 (`conf`)
-- **功能**: Supports YAML/TOML parsing. Features daemon-based dynamic hot-reloading (`-watch`).
-- **加密特性**: Integrates `SM4` ciphering for config security. Developers can use interactive CLI flags (`--crypt-conf`) or programmatic `conf.SetPassword()` to decrypt transparently at startup.
+- **功能与多源合并 (`.local` Override)**: Supports unified parsing of YAML/JSON/TOML formats. It features an intelligent `.local` fallback mechanism: whenever a main config (e.g., `config.yaml`) is loaded, it automatically deep-merges any sibling `.local` file (e.g., `config.local.yaml`). This prevents git pollution from developer-specific environments.
+- **自定义接管 (Custom `Unmarshal`)**: The framework prioritizes developer-injected `Unmarshal` handlers during config source initialization (`NewSourceConf`), permitting advanced logic like ENV interpolation before bytes bind to structures.
+- **热更新与加密安全 (`system.enc`)**: 
+  - Supports multiplexed daemon-based hot-reloading (`-watch`).
+  - Integrates `SM4` ciphering for configuration security. With the `--crypt-conf` CLI flag, it compiles the latest merged configuration into a highly secure `system.enc` ciphertext. 
+  - To prevent accidental leaks, developers are prompted to delete plaintext files. When running under ciphertext mode, dynamic `-watch` is forcefully disabled for strict security compliance.
 
 ### 3. 可观测性 (`log`, `metric`, `tracer`)
 - **log**: A high-performance asynchronous logger built over Uber `zap` supporting rotation and context-aware injection.
