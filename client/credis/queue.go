@@ -2,11 +2,13 @@ package credis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/xslasd/goxf/job/queue"
 )
 
 // QueueBroker implements the job/queue.Broker interface for Redis
@@ -32,34 +34,53 @@ func NewQueueBroker(client redis.Cmdable, waitTimeout time.Duration) *QueueBroke
 	}
 }
 
-func (q *QueueBroker) Dequeue(ctx context.Context, queueName string) (any, error) {
+func (q *QueueBroker) Dequeue(ctx context.Context, queueName string) (*queue.Message, error) {
 	// Periodic check to ensure sweeper is running if we have delayed tasks
 	q.sweeperOnce.Do(func() {
 		go q.runSweeper()
 	})
 
-	res, err := q.client.BLPop(ctx, q.waitTimeout, queueName).Result()
-	if err != nil {
-		if err == redis.Nil {
+	for {
+		res, err := q.client.BLPop(ctx, q.waitTimeout, queueName).Result()
+		if err != nil {
+			if err == redis.Nil {
+				return nil, nil
+			}
+			return nil, err
+		}
+
+		if len(res) < 2 {
 			return nil, nil
 		}
-		return nil, err
-	}
 
-	if len(res) < 2 {
-		return nil, nil
-	}
+		var msg queue.Message
+		if err := json.Unmarshal([]byte(res[1]), &msg); err != nil {
+			return nil, err
+		}
 
-	return []byte(res[1]), nil
+		// Check if the task has been cancelled
+		deletedKey := fmt.Sprintf("%s:deleted", queueName)
+		isDeleted, err := q.client.SIsMember(ctx, deletedKey, msg.ID).Result()
+		if err == nil && isDeleted {
+			q.client.SRem(ctx, deletedKey, msg.ID)
+			continue
+		}
+
+		return &msg, nil
+	}
 }
 
 // Enqueue pushes a message to the end of the Redis list queue.
-func (q *QueueBroker) Enqueue(ctx context.Context, queueName string, payload any) error {
-	return q.client.RPush(ctx, queueName, payload).Err()
+func (q *QueueBroker) Enqueue(ctx context.Context, queueName string, msg *queue.Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return q.client.RPush(ctx, queueName, data).Err()
 }
 
 // EnqueueAfter schedules a message for future delivery using Redis ZSET.
-func (q *QueueBroker) EnqueueAfter(ctx context.Context, queueName string, payload any, delay time.Duration) error {
+func (q *QueueBroker) EnqueueAfter(ctx context.Context, queueName string, msg *queue.Message, delay time.Duration) error {
 	q.sweeperOnce.Do(func() {
 		go q.runSweeper()
 	})
@@ -67,9 +88,15 @@ func (q *QueueBroker) EnqueueAfter(ctx context.Context, queueName string, payloa
 
 	delayedKey := fmt.Sprintf("%s:delayed", queueName)
 	at := time.Now().Add(delay).UnixMilli()
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
 	return q.client.ZAdd(ctx, delayedKey, &redis.Z{
 		Score:  float64(at),
-		Member: payload,
+		Member: data,
 	}).Err()
 }
 
@@ -103,6 +130,16 @@ return #expired`
 			})
 		}
 	}
+}
+
+// Delete marks a message ID as deleted in Redis.
+func (q *QueueBroker) Delete(ctx context.Context, queueName string, id string) error {
+	deletedKey := fmt.Sprintf("%s:deleted", queueName)
+	pipe := q.client.TxPipeline()
+	pipe.SAdd(ctx, deletedKey, id)
+	pipe.Expire(ctx, deletedKey, 24*time.Hour)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // Close stops the background sweeper.

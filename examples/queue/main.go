@@ -46,7 +46,7 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(3 * time.Second)
-			_ = worker.Enqueue(context.Background(), []byte("ORDER_12345"))
+			_, _ = worker.Enqueue(context.Background(), []byte("ORDER_12345"))
 		}
 	}()
 

@@ -48,7 +48,7 @@ func main() {
 
 			// 对于内存 Broker，我们提供了一个配套的 Enqueue 辅助方法用于直接投递
 			// 直接通过刚刚返回的 worker 实例将 Struct 送入队列中，这是最标准的写法
-			err := worker.Enqueue(context.Background(), task)
+			_, err := worker.Enqueue(context.Background(), task)
 			if err != nil {
 				log.Errorf("Enqueue failed: %v", err)
 			}

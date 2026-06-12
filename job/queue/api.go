@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xslasd/goxf/application"
 	"github.com/xslasd/goxf/conf"
 	"github.com/xslasd/goxf/hooks"
@@ -33,9 +34,10 @@ func NewWorker[T any](broker Broker, handler Handler[T], opts ...Option) (*Worke
 	}
 
 	w := &Worker[T]{
-		broker:  broker,
-		handler: handler,
-		opts:    opt,
+		broker:      broker,
+		handler:     handler,
+		opts:        opt,
+		activeTasks: make(map[string]context.CancelFunc),
 	}
 
 	if handler != nil {
@@ -52,10 +54,21 @@ func NewWorker[T any](broker Broker, handler Handler[T], opts ...Option) (*Worke
 }
 
 // Enqueue pushes a message to the queue utilizing the underlying Broker.
-func (w *Worker[T]) Enqueue(ctx context.Context, payload T) error {
+func (w *Worker[T]) Enqueue(ctx context.Context, payload T) (string, error) {
+	taskID := uuid.New().String()
+	err := w.EnqueueWithID(ctx, taskID, payload)
+	return taskID, err
+}
+
+// EnqueueWithID pushes a message to the queue utilizing the underlying Broker with a custom task ID.
+func (w *Worker[T]) EnqueueWithID(ctx context.Context, taskID string, payload T) error {
 	name := w.opts.config.QueueName
 	beg := time.Now()
-	err := w.broker.Enqueue(ctx, name, payload)
+	msg := &Message{
+		ID:      taskID,
+		Payload: payload,
+	}
+	err := w.broker.Enqueue(ctx, name, msg)
 	code := "ok"
 	if err != nil {
 		code = "error"
@@ -69,10 +82,21 @@ func (w *Worker[T]) Enqueue(ctx context.Context, payload T) error {
 }
 
 // EnqueueAfter schedules a message for future delivery.
-func (w *Worker[T]) EnqueueAfter(ctx context.Context, payload T, delay time.Duration) error {
+func (w *Worker[T]) EnqueueAfter(ctx context.Context, payload T, delay time.Duration) (string, error) {
+	taskID := uuid.New().String()
+	err := w.EnqueueAfterWithID(ctx, taskID, payload, delay)
+	return taskID, err
+}
+
+// EnqueueAfterWithID schedules a message for future delivery with a custom task ID.
+func (w *Worker[T]) EnqueueAfterWithID(ctx context.Context, taskID string, payload T, delay time.Duration) error {
 	name := w.opts.config.QueueName
 	beg := time.Now()
-	err := w.broker.EnqueueAfter(ctx, name, payload, delay)
+	msg := &Message{
+		ID:      taskID,
+		Payload: payload,
+	}
+	err := w.broker.EnqueueAfter(ctx, name, msg, delay)
 	code := "ok"
 	if err != nil {
 		code = "error"
@@ -83,4 +107,19 @@ func (w *Worker[T]) EnqueueAfter(ctx context.Context, payload T, delay time.Dura
 		metric.ClientHandleCounter.Inc(metric.JobType, name, "EnqueueAfter", "", code)
 	}
 	return err
+}
+
+// Cancel cancels a task, either if it is still delayed or if it is currently executing.
+func (w *Worker[T]) Cancel(ctx context.Context, taskID string) error {
+	// 1. Try to cancel currently executing task
+	w.activeTasksMu.Lock()
+	cancel, ok := w.activeTasks[taskID]
+	w.activeTasksMu.Unlock()
+	if ok {
+		cancel()
+	}
+
+	// 2. Try to cancel/delete it from the underlying broker (delayed or queued)
+	queueName := w.opts.config.QueueName
+	return w.broker.Delete(ctx, queueName, taskID)
 }
