@@ -5,7 +5,7 @@
 ## 主要特性
 
 - **模块化设计**：支持 server、client、auth、conf、log、util、i18n、hooks、flag 等模块，结构清晰，易于扩展。
-- **多协议支持**：内置 HTTP（基于 Gin）、gRPC、WebSocket 等多种服务协议。
+- **多协议支持**：内置 HTTP（基于 Gin）、gRPC、WebSocket、SSE（Server-Sent Events）等多种服务协议。
 - **配置热加载**：支持配置文件热重载，配置变更自动生效。
 - **优雅启停**：支持优雅启动与关闭，保证服务平滑退出。
 - **服务注册与发现**：预留服务注册与发现接口，便于集成 Consul、Etcd 等注册中心。

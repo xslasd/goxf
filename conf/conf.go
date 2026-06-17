@@ -227,7 +227,11 @@ func verifyPassword(isEnc bool) bool {
 				fmt.Println("Password cannot be empty")
 				os.Exit(1)
 			}
-			if pwd != configPassword {
+			checkPwd := pwd
+			if passwordCryptFunc != nil {
+				checkPwd = passwordCryptFunc(pwd)
+			}
+			if checkPwd != configPassword {
 				fmt.Println("Password is not correct")
 				os.Exit(1)
 			}

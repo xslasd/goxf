@@ -12,9 +12,15 @@ import (
 var defaultConfiguration = NewConf()
 
 var configPassword string
+var passwordCryptFunc func(string) string
 
-func SetPassword(pwd string) {
+func SetPassword(pwd string, cryptFn ...func(string) string) {
 	configPassword = pwd
+	if len(cryptFn) > 0 {
+		passwordCryptFunc = cryptFn[0]
+	} else {
+		passwordCryptFunc = nil
+	}
 }
 
 func LoadFromDataSource(ds ConfigSource, unmarshal Unmarshal) error {
