@@ -25,4 +25,9 @@ var (
 	// jwt
 	SigningKeyIsNull = add(-804, "签名密钥为空")
 	SigningKeyLimit  = add(-805, "签名密钥长度不足,至少32字节: 实际 %s 字节")
+
+	// sse
+	SSEBufferFull     = add(-806, "sse 缓冲区已满")
+	SSEClientNotExist = add(-807, "sse 客户端不存在")
+	SSEClientIdIsNull = add(-808, "sse 客户端ID为空")
 )
