@@ -27,6 +27,7 @@ server:
     default:
       Addr: "0.0.0.0:8080"                  # 绑定监听的地址及端口
       SlowQueryThresholdInMilli: 500        # 大于 500ms 的请求会被标记为 slow request
+      MaxMultipartMemory: 33554432          # 上传文件/请求体内存缓冲上限（字节），默认 32MB (32 << 20)
       AllowedOrigins:                       # CORS的跨域白名单（空则开放跨域限制）
         - "https://www.example.com"
 ```
@@ -181,3 +182,4 @@ func main() {
 | `WithEnableTrace(bool)` | 是否开启拓扑追踪 | 将 HTTP 请求链接入 Jaeger 分布式追踪网络 (待拓展) |
 | `WithCorsOptions(opts)` | cors.Options | 配置跨域行为，比如允许包含特定头部、特定 Origin |
 | `WithTimeoutEvent(event)` | func(c, route, cost) | 配置当慢查询（由阈值判断）触发时的附加事件或报警回调 |
+| `WithMaxMultipartMemory(int64)` | int64 (字节) | 设置表单/上传文件的最大内存缓冲大小（覆盖配置文件） |

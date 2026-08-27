@@ -6,9 +6,12 @@ import (
 )
 
 const (
-	//TraceContextHeaderName trace-id
+	// GoxfVersion 当前 goxf 框架核心版本号
+	GoxfVersion = "v0.5.0"
+
+	// TraceContextHeaderName trace-id
 	TraceContextHeaderName = "x-trace-id"
-	//KeyServiceInfo service_info
+	// KeyServiceInfo service_info
 	KeyServiceInfo = "__service_info_"
 )
 
@@ -35,6 +38,11 @@ type application struct {
 }
 
 var runtime = new(application)
+
+// GetGoxfVersion 获取 goxf 框架核心版本号
+func GetGoxfVersion() string {
+	return GoxfVersion
+}
 
 func GetAppId() string {
 	return runtime.appId
@@ -63,18 +71,52 @@ func CheckStartupGoxf() {
 	}
 }
 
+func GetTitle() string {
+	return title
+}
+func SetTitle(t string) {
+	title = t
+}
+
+func GetDescription() string {
+	return description
+}
+func SetDescription(d string) {
+	description = d
+}
+
 func GetVersion() string {
 	return buildVersion
 }
+func SetVersion(v string) {
+	buildVersion = v
+}
+
 func GetBuildUser() string {
 	return buildUser
+}
+func SetBuildUser(u string) {
+	buildUser = u
 }
 
 func GetBuildTime() string {
 	return buildTime
 }
+func SetBuildTime(t string) {
+	buildTime = t
+}
+
 func GetStartTime() time.Time {
 	return runtime.startTime
+}
+
+// InitAppInfo 初始化业务应用版本与元数据信息
+func InitAppInfo(t, d, v, u, bTime string) {
+	title = t
+	description = d
+	buildVersion = v
+	buildUser = u
+	buildTime = bTime
 }
 
 func NewRuntime(appId, serviceName string, enableConsole, enableTrace, enableMetric, enableRegister, enablePprof bool) {
@@ -89,6 +131,7 @@ func NewRuntime(appId, serviceName string, enableConsole, enableTrace, enableMet
 }
 
 func PrintVersion() {
+	fmt.Printf("goxfVersion: %s\n", GoxfVersion)
 	fmt.Printf("title: %s\n", title)
 	fmt.Printf("description: %s\n", description)
 	fmt.Printf("buildVersion: %s\n", buildVersion)

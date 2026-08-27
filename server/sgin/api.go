@@ -22,6 +22,10 @@ func NewGinServer(opts ...Option) (*Server, error) {
 	if err := conf.UnmarshalKey(key, opt.config); err != nil {
 		log.Panic("unmarshal config err", log.FieldErr(err), log.FieldKey(key), log.FieldValueAny(opt.config))
 	}
+	// apply options again so explicit Options override configuration values
+	for _, o := range opts {
+		o(opt)
+	}
 
 	if opt.enableConsole {
 		opt.middleware = append(opt.middleware, debugMiddleware(opt.confName, opt.config.SlowQueryThresholdInMilli, opt.setRouteFn, opt.timeoutEvent))
@@ -49,6 +53,9 @@ func NewGinServer(opts ...Option) (*Server, error) {
 	}
 
 	engine := gin.New()
+	if opt.config.MaxMultipartMemory > 0 {
+		engine.MaxMultipartMemory = opt.config.MaxMultipartMemory
+	}
 	corsHandel := cors.New(opt.corsOptions)
 	engine.Use(func(ctx *gin.Context) {
 		corsHandel.HandlerFunc(ctx.Writer, ctx.Request)

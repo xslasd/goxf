@@ -202,7 +202,7 @@ func verifyPassword(isEnc bool) bool {
 	if configPassword != "" {
 		vPassword := false
 		for _, arg := range os.Args {
-			if arg == "--crypt-conf" {
+			if arg == "--crypt-conf" || arg == "-e" {
 				vPassword = true
 				break
 			}

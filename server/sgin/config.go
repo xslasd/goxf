@@ -13,6 +13,7 @@ type Config struct {
 	Addr                      string
 	SlowQueryThresholdInMilli int64
 	AllowedOrigins            []string
+	MaxMultipartMemory        int64 // 最大上传/请求体内存缓冲大小 (字节)
 }
 
 type srvOption struct {
@@ -103,11 +104,18 @@ func WithPrintRoute(isPrint bool) Option {
 	}
 }
 
+func WithMaxMultipartMemory(maxMemory int64) Option {
+	return func(o *srvOption) {
+		o.config.MaxMultipartMemory = maxMemory
+	}
+}
+
 // DefaultConfig ...
 func defaultConfig() *Config {
 	return &Config{
 		Addr:                      "0.0.0.0:8080",
 		SlowQueryThresholdInMilli: 500, // 500ms
+		MaxMultipartMemory:        32 << 20, // 32MB
 	}
 }
 
