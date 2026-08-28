@@ -5,12 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/xslasd/goxf/application"
 	"github.com/xslasd/goxf/conf"
 	"github.com/xslasd/goxf/hooks"
 	"github.com/xslasd/goxf/log"
 	"github.com/xslasd/goxf/metric"
+	"github.com/xslasd/goxf/utils/xrand"
 )
 
 func NewWorker[T any](broker Broker, handler Handler[T], opts ...Option) (*Worker[T], error) {
@@ -55,7 +55,7 @@ func NewWorker[T any](broker Broker, handler Handler[T], opts ...Option) (*Worke
 
 // Enqueue pushes a message to the queue utilizing the underlying Broker.
 func (w *Worker[T]) Enqueue(ctx context.Context, payload T) (string, error) {
-	taskID := uuid.New().String()
+	taskID := xrand.UUIDv7()
 	err := w.EnqueueWithID(ctx, taskID, payload)
 	return taskID, err
 }
@@ -83,7 +83,7 @@ func (w *Worker[T]) EnqueueWithID(ctx context.Context, taskID string, payload T)
 
 // EnqueueAfter schedules a message for future delivery.
 func (w *Worker[T]) EnqueueAfter(ctx context.Context, payload T, delay time.Duration) (string, error) {
-	taskID := uuid.New().String()
+	taskID := xrand.UUIDv7()
 	err := w.EnqueueAfterWithID(ctx, taskID, payload, delay)
 	return taskID, err
 }

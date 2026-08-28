@@ -20,7 +20,6 @@ import (
 	"github.com/xslasd/goxf/tracer/jaeger"
 
 	"github.com/fatih/color"
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/xslasd/goxf/conf"
 	"github.com/xslasd/goxf/flag"
@@ -28,6 +27,7 @@ import (
 	"github.com/xslasd/goxf/log"
 	"github.com/xslasd/goxf/server"
 	"github.com/xslasd/goxf/utils/xfmt"
+	"github.com/xslasd/goxf/utils/xrand"
 	"golang.org/x/sync/errgroup"
 
 	_ "github.com/xslasd/goxf/conf/filesource"
@@ -65,7 +65,7 @@ func InitBase(opts ...Option) error {
 
 	if s == nil {
 		s = &Service{
-			appID:    strings.ToLower(strings.ReplaceAll(uuid.New().String(), "-", "")),
+			appID:    xrand.UUIDv7Simple(),
 			confAddr: "config.yaml",
 		}
 		for _, o := range opts {
@@ -78,7 +78,7 @@ func InitBase(opts ...Option) error {
 
 func NewService(opts ...Option) *Service {
 	s := new(Service)
-	s.appID = strings.ToLower(strings.ReplaceAll(uuid.New().String(), "-", ""))
+	s.appID = xrand.UUIDv7Simple()
 	for _, o := range opts {
 		o(s)
 	}
