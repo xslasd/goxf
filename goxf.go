@@ -21,6 +21,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/google/uuid"
+	"github.com/spf13/cobra"
 	"github.com/xslasd/goxf/conf"
 	"github.com/xslasd/goxf/flag"
 	"github.com/xslasd/goxf/hooks"
@@ -41,6 +42,38 @@ type Service struct {
 	confUnmarshal conf.Unmarshal
 	servers       []server.Server
 	registry      registry.Registry
+
+	baseInited   bool // 是否已初始化基础依赖 (config, application runtime, logger)
+	bootstrapped bool // 是否已经初始化过全部基础设施
+}
+
+var (
+	currentServiceMu sync.RWMutex
+	currentService   *Service
+)
+
+// RequireInitBase 标记一个子命令在执行前需要 goxf 自动完成基础依赖初始化 (配置加载、运行时元数据、日志系统)
+func RequireInitBase(cmd *cobra.Command, require ...bool) *cobra.Command {
+	return flag.RequireInitBase(cmd, require...)
+}
+
+// InitBase 供任何代码或子命令随时按需手动初始化基础依赖 (配置加载、运行时元数据、日志系统)，幂等安全
+func InitBase(opts ...Option) error {
+	currentServiceMu.RLock()
+	s := currentService
+	currentServiceMu.RUnlock()
+
+	if s == nil {
+		s = &Service{
+			appID:    strings.ToLower(strings.ReplaceAll(uuid.New().String(), "-", "")),
+			confAddr: "config.yaml",
+		}
+		for _, o := range opts {
+			o(s)
+		}
+		registerDefaultFlags(s.appID, s.confAddr)
+	}
+	return s.InitBase()
 }
 
 func NewService(opts ...Option) *Service {
@@ -52,18 +85,70 @@ func NewService(opts ...Option) *Service {
 	if s.confAddr == "" {
 		s.confAddr = "config.yaml"
 	}
-	err := parseFlags(s.appID, s.confAddr)
-	if err != nil {
-		panic(fmt.Errorf("parse flags error:%w", err))
-	}
+	currentServiceMu.Lock()
+	currentService = s
+	currentServiceMu.Unlock()
 	s.printBanner()
+	// 注册默认参数标志与子命令
+	registerDefaultFlags(s.appID, s.confAddr)
+
+	// 1. 如果命令行命中了注册的子命令（例如 migrate, scaffold, version 等）
+	if matchedCmd := flag.MatchedSubCommand(); matchedCmd != nil {
+		// 若该子命令声明了需要 InitBase，则在执行前自动初始化配置、运行时和日志
+		if flag.ShouldInitBase(matchedCmd) {
+			if err := s.InitBase(); err != nil {
+				fmt.Fprintf(os.Stderr, "init base error for command [%s]: %v\n", matchedCmd.Name(), err)
+				os.Exit(1)
+			}
+		}
+
+		// 直接分发执行该子命令逻辑并安全退出
+		if err := flag.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// 2. 正常微服务启动流程：执行完整 Bootstrap
+	if err := s.Bootstrap(); err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// InitBase 初始化核心基础依赖（配置加载、运行时元数据、日志系统），不启动网络服务器与注册中心
+func (s *Service) InitBase() error {
+	if s.baseInited {
+		return nil
+	}
+	s.baseInited = true
+
+	// 解析全局命令行参数 (支持识别 -c, -w 等全局标志)
+	if err := flag.Parse(); err != nil {
+		return fmt.Errorf("parse flags error: %w", err)
+	}
+
 	hooks.Do(hooks.Stage_BeforeLoadConfig)
 	s.initConfig()
 	s.loadBaseConfig()
 	s.initLogger()
+	return nil
+}
+
+// Bootstrap 初始化全部微服务基础设施（配置、日志、Tracer 和 Registry 等）
+func (s *Service) Bootstrap() error {
+	if s.bootstrapped {
+		return nil
+	}
+	s.bootstrapped = true
+
+	if err := s.InitBase(); err != nil {
+		return err
+	}
 	s.initTracer()
 	s.initRegistry()
-	return s
+	return nil
 }
 
 // initConfig init
@@ -73,7 +158,7 @@ func (s *Service) initConfig() {
 		s.isWatchConf = flag.Bool("watch")
 	}
 	xfmt.Printf("goxf intends to read config from: %s", configAddr)
-	err := conf.NewSourceConf(configAddr, s.confUnmarshal, s.isWatchConf)
+	err := conf.LoadFromSource(configAddr, conf.WithUnmarshal(s.confUnmarshal), conf.WithWatch(s.isWatchConf))
 	if err != nil {
 		panic(fmt.Errorf("create config data source error:%w", err))
 	}
@@ -146,8 +231,19 @@ func (s *Service) initRegistry() {
 	resolver.RegisterBuilder(s.registry.Kind(), s.registry)
 }
 
-// Run 开启所有的server，并且监听退出信号
+// Run 开启所有的server，并且监听退出信号；若命中了子命令则自动路由执行子命令
 func (s *Service) Run(servers ...server.Server) error {
+	// 1. 如果命令行命中了注册的子命令（例如 migrate, scaffold, version 等）
+	// 直接分发执行该子命令逻辑并退出，不触发微服务基础设施初始化与 Server 启动
+	if flag.HasSubCommand() {
+		return flag.Execute()
+	}
+
+	// 2. 正常启动流程：初始化微服务基础设施
+	if err := s.Bootstrap(); err != nil {
+		return err
+	}
+
 	hooks.Do(hooks.Stage_BeforeRun)
 	done := make(chan error)
 	//governor server

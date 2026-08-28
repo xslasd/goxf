@@ -18,17 +18,28 @@ When working on `goxf`, AI agents and developers must strictly adhere to the fol
 
 ## 核心功能模块全景 (Functional Modules)
 
-### 1. 运行容器底层 (`application` / `goxf.go`)
-- **功能**: The entry point `Service` context. Manages initialization of configs, logger, traces, metrics, and OS exit signals.
+### 1. 运行容器底层与 CLI 生命周期 (`application`, `goxf.go`, `flag`)
+- **功能**: The entry point `Service` context and CLI subsystem. Manages initialization of configs, logger, traces, metrics, subcommands, and OS exit signals.
+- **生命周期分层**:
+  - `InitBase()`: Core essentials (flag parsing, config load via `-c`, `application.Runtime` setup, `log.Logger` init). No network listener, no banner, no ETCD registration.
+  - `Bootstrap()`: Full microservice container setup (`InitBase()` + banner + Jaeger Tracer + ETCD Registry).
+  - `Run(servers...)`: Serves protocols and blocks on OS signals.
+- **Subcommand Interception**:
+  - Use `flag.AddCommand(cmd)` for offline/tool subcommands (no config overhead).
+  - Use `flag.AddCommandWithBase(cmd)` (or `flag.AddBaseCommand`) for subcommands requiring configs/database/logger (e.g. `migrate`, `seed`, `worker`).
+  - When a subcommand matches, `goxf.NewService()` automatically intercepts execution, runs the subcommand, and exits cleanly (`os.Exit(0)`) without starting network servers.
 - **原则**: Use `hooks.Register` (Stages: `BeforeLoadConfig`, `BeforeRun`, `BeforeStop`, `AfterStop`) to manage cross-module shutdown/startup sequences cleanly.
 
 ### 2. 配置中心 (`conf`)
-- **功能与多源合并 (`.local` Override)**: Supports unified parsing of YAML/JSON/TOML formats. It features an intelligent `.local` fallback mechanism: whenever a main config (e.g., `config.yaml`) is loaded, it automatically deep-merges any sibling `.local` file (e.g., `config.local.yaml`). This prevents git pollution from developer-specific environments.
-- **自定义接管 (Custom `Unmarshal`)**: The framework prioritizes developer-injected `Unmarshal` handlers during config source initialization (`NewSourceConf`), permitting advanced logic like ENV interpolation before bytes bind to structures.
-- **热更新与加密安全 (`system.enc`)**: 
-  - Supports multiplexed daemon-based hot-reloading (`-watch`).
-  - Integrates `SM4` ciphering for configuration security. With the `--crypt-conf` CLI flag, it compiles the latest merged configuration into a highly secure `system.enc` ciphertext. 
-  - To prevent accidental leaks, developers are prompted to delete plaintext files. When running under ciphertext mode, dynamic `-watch` is forcefully disabled for strict security compliance.
+- **多实例与 Functional Options (`LoadFromSource` / `NewConfFromSource`)**:
+  - `conf.LoadFromSource(addr, opts...)`: Loads and deep-merges into the global singleton.
+  - `conf.NewConfFromSource(addr, opts...)`: Creates an isolated, standalone `*conf.Conf` instance with separate delimiters, password, and state.
+  - Functional Options: `conf.WithWatch`, `conf.WithUnmarshal`, `conf.WithKeyDelimiter`, `conf.WithPassword`, `conf.WithIgnoreGlobalPassword`.
+- **多源合并 (`.local` Override)**: Supports unified parsing of YAML/JSON/TOML formats. It features an intelligent `.local` fallback mechanism: whenever a main config (e.g., `config.yaml`) is loaded, it automatically deep-merges any sibling `.local` file (e.g., `config.local.yaml`). This prevents git pollution from developer-specific environments.
+- **热更新与加密安全 (`.enc`)**: 
+  - Dynamic ciphertext mapping prevents multi-config overwriting (`config.yaml` $\rightarrow$ `system.enc`, `custom.yaml` $\rightarrow$ `custom.enc`).
+  - Supports transparent decryption of any `*.enc` file.
+  - Explicit path prompts during password validation (`Enter config password for [...]`).
 
 ### 3. 可观测性 (`log`, `metric`, `tracer`)
 - **log**: A high-performance asynchronous logger built over Uber `zap` supporting rotation and context-aware injection.

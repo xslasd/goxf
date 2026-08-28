@@ -8,7 +8,7 @@ goxf:
 i18n:
     default:
         language: zh
-        path: i18n
+        path: examples/i18n
 jwt:
     expiresAt: 12h
     signingKey: your_secret_key_heresssssadaswqeq

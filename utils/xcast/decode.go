@@ -59,8 +59,10 @@ func decode(data any, val reflect.Value) error {
 		return decodeUint(data, val)
 	case reflect.Float32, reflect.Float64:
 		return decodeFloat(data, val)
-	case reflect.Map, reflect.Slice:
-		return decodeInterface(data, val)
+	case reflect.Map:
+		return decodeMap(data, val)
+	case reflect.Slice, reflect.Array:
+		return decodeSlice(data, val)
 	case reflect.Ptr:
 		return decodePtr(data, val)
 	case reflect.Struct:
@@ -82,7 +84,37 @@ func decodeStruct(data any, val reflect.Value) error {
 	switch dataKind {
 	// Only map can converted into struct
 	case reflect.Map:
-		return fmt.Errorf("cannot convert map to struct type %s", val.Type().Name())
+		valType := val.Type()
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+			fieldType := valType.Field(i)
+			tag := fieldType.Tag.Get("json")
+			if tag == "" || tag == "-" {
+				tag = fieldType.Tag.Get("mapstructure")
+			}
+			if tag == "" || tag == "-" {
+				tag = strings.ToLower(fieldType.Name)
+			}
+			tagName := strings.Split(tag, ",")[0]
+
+			var mapVal reflect.Value
+			for _, k := range dataVal.MapKeys() {
+				if k.String() == tagName || strings.EqualFold(k.String(), tagName) {
+					mapVal = dataVal.MapIndex(k)
+					break
+				}
+			}
+
+			if mapVal.IsValid() {
+				if err := decode(mapVal.Interface(), field); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported conversion from %s to struct", dataKind)
 	}
@@ -209,69 +241,78 @@ func decodeString(data any, val reflect.Value) error {
 	case reflect.Float32, reflect.Float64:
 		val.SetString(strconv.FormatFloat(dataVal.Float(), 'f', -1, 64))
 	case reflect.String:
-		d, err := strconv.ParseInt(dataVal.String(), 0, val.Type().Bits())
-		if err != nil {
-			return fmt.Errorf("parse '%s' as int failed: %s", dataVal.String(), err)
-		}
-		val.SetInt(d)
+		val.SetString(dataVal.String())
 	default:
 		return fmt.Errorf("cannot convert %s to string", dataKind)
 	}
 	return nil
 }
 
-func decodeInterface(data any, val reflect.Value) error {
+func decodeMap(data any, val reflect.Value) error {
 	valType := val.Type()
 	valKey := valType.Key()
 	valElem := valType.Elem()
 
 	dataVal := reflect.Indirect(reflect.ValueOf(data))
 	dataKind := dataVal.Kind()
-	switch dataKind {
-	case reflect.Map:
-		valMap := val
-		if valMap.IsNil() {
-			valMap = reflect.MakeMap(reflect.MapOf(valKey, valElem))
-		}
-		for _, k := range dataVal.MapKeys() {
-			subKey := reflect.Indirect(reflect.New(valType))
-			if err := decode(k.Interface(), subKey); err != nil {
-				continue
-			}
-
-			v := dataVal.MapIndex(k).Interface()
-			subVal := reflect.Indirect(reflect.New(valElem))
-			if err := decode(v, subVal); err != nil {
-				continue
-			}
-
-			valMap.SetMapIndex(subKey, subVal)
-		}
-
-		val.Set(valMap)
-	case reflect.Array:
-	case reflect.Slice:
-		valSlice := val
-		if valSlice.IsNil() {
-			valSlice = reflect.MakeSlice(reflect.SliceOf(valElem), dataVal.Len(), dataVal.Len())
-
-		}
-		for i := 0; i < dataVal.Len(); i++ {
-			subData := dataVal.Index(i).Interface()
-			for valSlice.Len() <= i {
-				valSlice = reflect.Append(valSlice, reflect.Zero(valElem))
-			}
-			subField := valSlice.Index(i)
-			if err := decode(subData, subField); err != nil {
-				continue
-			}
-		}
-
-		val.Set(valSlice)
-	default:
-		return fmt.Errorf("cannot convert %s to map/slice", dataKind)
+	if dataKind != reflect.Map {
+		return fmt.Errorf("cannot convert %s to map", dataKind)
 	}
 
+	valMap := val
+	if valMap.IsNil() {
+		valMap = reflect.MakeMap(reflect.MapOf(valKey, valElem))
+	}
+	for _, k := range dataVal.MapKeys() {
+		subKey := reflect.Indirect(reflect.New(valKey))
+		if err := decode(k.Interface(), subKey); err != nil {
+			continue
+		}
+
+		v := dataVal.MapIndex(k).Interface()
+		subVal := reflect.Indirect(reflect.New(valElem))
+		if err := decode(v, subVal); err != nil {
+			continue
+		}
+
+		valMap.SetMapIndex(subKey, subVal)
+	}
+
+	val.Set(valMap)
+	return nil
+}
+
+func decodeSlice(data any, val reflect.Value) error {
+	valType := val.Type()
+	valElem := valType.Elem()
+
+	dataVal := reflect.Indirect(reflect.ValueOf(data))
+	dataKind := dataVal.Kind()
+	if dataKind != reflect.Slice && dataKind != reflect.Array {
+		return fmt.Errorf("cannot convert %s to slice", dataKind)
+	}
+
+	valSlice := val
+	if valSlice.IsNil() {
+		valSlice = reflect.MakeSlice(reflect.SliceOf(valElem), dataVal.Len(), dataVal.Len())
+	}
+	for i := 0; i < dataVal.Len(); i++ {
+		subData := dataVal.Index(i).Interface()
+		for valSlice.Len() <= i {
+			valSlice = reflect.Append(valSlice, reflect.Zero(valElem))
+		}
+		subField := valSlice.Index(i)
+		if err := decode(subData, subField); err != nil {
+			continue
+		}
+	}
+
+	val.Set(valSlice)
+	return nil
+}
+
+func decodeInterface(data any, val reflect.Value) error {
+	val.Set(reflect.ValueOf(data))
 	return nil
 }
 

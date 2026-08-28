@@ -9,7 +9,8 @@ import (
 	"github.com/xslasd/goxf/flag"
 )
 
-func parseFlags(appID, configFile string) error {
+// registerDefaultFlags 注册框架内置参数标志 (-h, -c, -w, -v, -e) 与内置子命令
+func registerDefaultFlags(appID, configFile string) {
 	// 注册短参数与全量参数标志 (-h, -c, -w, -v, -e)
 	flag.Register(
 		&flag.BoolFlag{
@@ -49,7 +50,7 @@ func parseFlags(appID, configFile string) error {
 		},
 	)
 
-	// 注册短子命令体系 (Subcommands: version/v, help/h)
+	// 注册内置版本子命令体系 (Subcommands: version/v)
 	flag.AddCommand(&cobra.Command{
 		Use:     "version",
 		Aliases: []string{"v"},
@@ -60,19 +61,4 @@ func parseFlags(appID, configFile string) error {
 			os.Exit(0)
 		},
 	})
-
-	// 快速命中短子命令 (如: app v, app version, app help)
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "version", "v":
-			fmt.Printf("appId: %s\n", appID)
-			application.PrintVersion()
-			os.Exit(0)
-		case "help":
-			flag.PrintDefaults()
-			os.Exit(0)
-		}
-	}
-
-	return flag.Parse()
 }

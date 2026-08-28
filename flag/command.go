@@ -50,6 +50,12 @@ func (c *Command) BindStruct(v interface{}) *Command {
 	return c
 }
 
+// RequireInitBase marks whether this command requires goxf InitBase (config, runtime, logger) before execution.
+func (c *Command) RequireInitBase(require ...bool) *Command {
+	RequireInitBase(c.Command, require...)
+	return c
+}
+
 // AddSubCommand adds subcommands to this command.
 func (c *Command) AddSubCommand(cmds ...*cobra.Command) *Command {
 	c.Command.AddCommand(cmds...)

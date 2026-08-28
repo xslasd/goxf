@@ -31,49 +31,64 @@ func Register(scheme string, creator DataSourceCreatorFunc) {
 	registry[scheme] = creator
 }
 
-// NewSourceConf  创建配置文件实例
-func NewSourceConf(configAddr string, confUnmarshal Unmarshal, watch bool) error {
+// CreateConfigSource 根据配置地址创建并初始化对应的 ConfigSource 以及对应的 Unmarshal 函数
+func CreateConfigSource(configAddr string, opts ...Option) (ConfigSource, Unmarshal, error) {
 	if configAddr == "" {
-		return NoConfigErr
+		return nil, nil, NoConfigErr
 	}
-	urlObj, err := url.Parse(configAddr)
-	if err != nil {
-		return err
+
+	opt := defaultOptions()
+	for _, o := range opts {
+		o(opt)
 	}
+
 	var scheme = FileScheme
-	if len(urlObj.Scheme) > 1 {
-		scheme = urlObj.Scheme
-	}
-	creatorFunc, exist := GetDataSourceCreatorFunc(scheme)
-	if !exist {
-		return InvalidConfigSource
-	}
+	var path = configAddr
 
-	var ds ConfigSource
-
-	switch scheme {
-	case FileScheme:
-		path := urlObj.Path
+	if strings.Contains(configAddr, "://") {
+		urlObj, err := url.Parse(configAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(urlObj.Scheme) > 1 {
+			scheme = urlObj.Scheme
+		}
+		path = urlObj.Path
 		// Windows 下 /D:/path -> D:/path
 		if len(path) > 2 && path[0] == '/' && path[2] == ':' {
 			path = path[1:]
 		}
+	}
+
+	creatorFunc, exist := GetDataSourceCreatorFunc(scheme)
+	if !exist {
+		return nil, nil, InvalidConfigSource
+	}
+
+	var ds ConfigSource
+	var finalUnmarshal = opt.unmarshal
+	watch := opt.watch
+	effPwd, effCryptFn := opt.getEffectivePassword()
+
+	switch scheme {
+	case FileScheme:
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 
 		baseName := filepath.Base(absPath)
 		ext := filepath.Ext(baseName)
 		dir := filepath.Dir(absPath)
-		isEnc := baseName == "system.enc"
+		isEnc := strings.HasSuffix(baseName, ".enc")
 		isLocal := strings.HasSuffix(baseName, ".local"+ext)
 
 		if isEnc {
 			watch = false
 		}
 
-		vPwd := verifyPassword(isEnc)
+		displayAddr := formatRelPath(absPath)
+		vPwd := verifyPassword(displayAddr, effPwd, effCryptFn, isEnc)
 
 		wrapper := &fileSourceWrapper{
 			isEnc:           isEnc,
@@ -82,7 +97,9 @@ func NewSourceConf(configAddr string, confUnmarshal Unmarshal, watch bool) error
 			ext:             ext,
 			absPath:         absPath,
 			dir:             dir,
-			customUnmarshal: confUnmarshal,
+			password:        effPwd,
+			passwordCryptFn: effCryptFn,
+			customUnmarshal: opt.unmarshal,
 			changed:         make(chan struct{}, 1),
 		}
 
@@ -101,6 +118,7 @@ func NewSourceConf(configAddr string, confUnmarshal Unmarshal, watch bool) error
 		wrapper.startWatch()
 
 		ds = wrapper
+		finalUnmarshal = nil // FileScheme wrapper determines the final unmarshal format (e.g. after yaml merge)
 
 	default:
 		ds = creatorFunc(configAddr, watch)
@@ -115,12 +133,47 @@ func NewSourceConf(configAddr string, confUnmarshal Unmarshal, watch bool) error
 		})
 	}
 
-	if scheme == FileScheme {
-		// FileScheme wrapper determines the final unmarshal format (e.g. after yaml merge)
-		return LoadFromDataSource(ds, nil)
-	}
+	return ds, finalUnmarshal, nil
+}
 
-	return LoadFromDataSource(ds, confUnmarshal)
+// NewConfFromSource 创建并返回一个全新的独立 Conf 实例，并从指定的配置源加载配置（不影响全局 defaultConfiguration）
+func NewConfFromSource(configAddr string, opts ...Option) (*Conf, error) {
+	ds, um, err := CreateConfigSource(configAddr, opts...)
+	if err != nil {
+		return nil, err
+	}
+	c := NewConf(opts...)
+	if err := c.LoadFromConfigSource(ds, um); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// NewFileConfSource 从指定文件路径创建并返回一个全新的独立 Conf 实例（自动按文件后缀匹配解析器）
+func NewFileConfSource(configAddr string, watch bool, opts ...Option) (*Conf, error) {
+	allOpts := append([]Option{WithWatch(watch)}, opts...)
+	return NewConfFromSource(configAddr, allOpts...)
+}
+
+// LoadFromSource 将指定地址的配置源加载并合并到当前 Conf 实例中
+func (c *Conf) LoadFromSource(configAddr string, opts ...Option) error {
+	opt := defaultOptions()
+	for _, o := range opts {
+		o(opt)
+	}
+	if opt.keyDelimiter != "." && c.keyDelimiter == "." {
+		c.keyDelimiter = opt.keyDelimiter
+	}
+	ds, um, err := CreateConfigSource(configAddr, opts...)
+	if err != nil {
+		return err
+	}
+	return c.LoadFromConfigSource(ds, um)
+}
+
+// LoadFromSource 加载指定地址的配置源并合并到全局默认 defaultConfiguration 实例中
+func LoadFromSource(configAddr string, opts ...Option) error {
+	return defaultConfiguration.LoadFromSource(configAddr, opts...)
 }
 
 func GetDataSourceCreatorFunc(scheme string) (DataSourceCreatorFunc, bool) {

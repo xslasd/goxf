@@ -5,8 +5,10 @@
 ## 主要特性
 
 - **模块化设计**：支持 server、client、auth、conf、log、util、i18n、hooks、flag 等模块，结构清晰，易于扩展。
+- **现代化多命令 CLI**：集成 Cobra/pflag，支持短参数、环境变量、结构体标签映射，以及 `flag.AddCommand` 与 `flag.AddCommandWithBase` 智能子命令生命周期路由。
+- **多配置实例与隔离**：支持全局单例深度合并（`conf.LoadFromSource`）与完全隔离的独立配置实例（`conf.NewConfFromSource`），支持函数式选项（`WithWatch`, `WithPassword`, `WithKeyDelimiter` 等）。
 - **多协议支持**：内置 HTTP（基于 Gin）、gRPC、WebSocket、SSE（Server-Sent Events）等多种服务协议。
-- **配置热加载**：支持配置文件热重载，配置变更自动生效。
+- **配置热加载与加密**：支持 `.local` 本地覆盖与配置文件动态监听热重载；支持 SM4 国密配置加解密与多文件防覆盖。
 - **优雅启停**：支持优雅启动与关闭，保证服务平滑退出。
 - **服务注册与发现**：预留服务注册与发现接口，便于集成 Consul、Etcd 等注册中心。
 - **高性能日志**：集成 zap 日志库，支持异步日志、日志切割。
@@ -22,20 +24,21 @@
 ├── application/    # 运行时与应用管理
 ├── auth/           # 认证与鉴权
 ├── client/         # 客户端相关
-├── conf/           # 配置管理
+├── conf/           # 配置管理 (多实例/Options/加解密)
 ├── ecode/          # 错误码管理
 ├── examples/       # 示例代码
-├── flag/           # 命令行参数
+├── flag/           # 命令行参数与多子命令调度
 ├── hooks/          # 生命周期钩子
 ├── i18n/           # 国际化
+├── job/            # 后台任务引擎 (cron/queue)
 ├── log/            # 日志系统
-├── server/         # 服务端相关
+├── server/         # 服务端相关 (Gin/gRPC/SSE/WebSocket)
 ├── util/           # 工具包
 ├── config.go       # 配置结构定义
 ├── go.mod          # Go 依赖管理
 ├── go.sum          # Go 依赖校验
-├── goxf.go         # 框架主入口
-├── hlep.go         # 帮助信息
+├── goxf.go         # 框架主入口与生命周期容器
+├── hlep.go         # 默认 CLI 标志注册
 └── README.md       # 项目说明
 ```
 
@@ -51,27 +54,49 @@
 
    在项目根目录下创建 `config.yaml`，参考 `examples/config.yaml`。
 
-3. **启动服务**
+3. **启动微服务与子命令**
 
    ```go
    package main
 
    import (
+       "github.com/spf13/cobra"
        "github.com/xslasd/goxf"
+       "github.com/xslasd/goxf/flag"
+       "github.com/xslasd/goxf/log"
+       "github.com/xslasd/goxf/server/sgin"
    )
 
    func main() {
-       service := goxf.NewService()
-       // 添加自定义 server
-       // service.AddServer(...)
-       service.Run()
+       // 1. 注册需要读取配置与日志的子命令 (如数据库迁移、离线任务等)
+       flag.AddCommandWithBase(&cobra.Command{
+           Use:   "migrate",
+           Short: "执行数据库表结构同步与迁移",
+           Run: func(cmd *cobra.Command, args []string) {
+               log.Info("开始执行数据库迁移...")
+               // 此时已自动加载 -c 配置文件并初始化运行时与 Logger
+           },
+       })
+
+       // 2. 构造服务
+       service := goxf.NewService(
+           goxf.WithDefaultConfAddr("config.yaml"),
+       )
+
+       // 3. 注册 HTTP 服务并启动
+       ginServer, _ := sgin.NewGinServer()
+       _ = service.Run(ginServer)
    }
    ```
 
 4. **运行项目**
 
    ```bash
+   # 启动微服务
    go run main.go
+
+   # 执行子命令 (自动完成配置与日志初始化，不启动 HTTP 服务)
+   go run main.go migrate -c config.yaml
    ```
 
 ## 主要依赖

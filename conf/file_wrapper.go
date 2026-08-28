@@ -26,6 +26,8 @@ type fileSourceWrapper struct {
 	absPath         string
 	localPath       string
 	dir             string
+	password        string
+	passwordCryptFn func(string) string
 	customUnmarshal Unmarshal
 	changed         chan struct{}
 	closeOnce       sync.Once
@@ -45,9 +47,9 @@ func (s *fileSourceWrapper) ReadConfig() ([]byte, string, error) {
 			return nil, "", InvalidConfigData
 		}
 		hexStr, ext := parts[0], parts[1]
-		pwd := configPassword
+		pwd := s.password
 		if pwd == "" {
-			return nil, "", errors.New("password cannot be empty for system.enc")
+			return nil, "", errors.New("password cannot be empty for " + filepath.Base(s.absPath))
 		}
 		decrypted, err := sm4.Sm4DecryptFromHex([]byte(pwd), hexStr)
 		if err != nil {
@@ -57,7 +59,7 @@ func (s *fileSourceWrapper) ReadConfig() ([]byte, string, error) {
 		format = ext
 
 		if s.vPwd {
-			fName := filepath.Join(s.dir, "config"+ext)
+			fName := s.getPlainFileName(ext)
 			os.WriteFile(fName, content, 0666)
 			hooks.Register(hooks.Stage_AfterRun, func() {
 				fmt.Println()
@@ -80,10 +82,10 @@ func (s *fileSourceWrapper) ReadConfig() ([]byte, string, error) {
 		}
 
 		if s.vPwd {
-			pwd := configPassword
+			pwd := s.password
 			enc, err := sm4.Sm4EncryptToHex([]byte(pwd), content)
 			if err == nil {
-				fName := filepath.Join(s.dir, "system.enc")
+				fName := s.getEncFileName()
 				finalData := fmt.Sprintf("%s|%s", enc, s.ext)
 				os.WriteFile(fName, []byte(finalData), 0666)
 				hooks.Register(hooks.Stage_AfterRun, func() {
@@ -144,10 +146,10 @@ func (s *fileSourceWrapper) ReadConfig() ([]byte, string, error) {
 		format = "yaml"
 
 		if s.vPwd {
-			pwd := configPassword
+			pwd := s.password
 			enc, err := sm4.Sm4EncryptToHex([]byte(pwd), content)
 			if err == nil {
-				fName := filepath.Join(s.dir, "system.enc")
+				fName := s.getEncFileName()
 				finalData := fmt.Sprintf("%s|%s", enc, ".yaml")
 				os.WriteFile(fName, []byte(finalData), 0666)
 				hooks.Register(hooks.Stage_AfterRun, func() {
@@ -162,6 +164,27 @@ func (s *fileSourceWrapper) ReadConfig() ([]byte, string, error) {
 		}
 	}
 	return content, format, nil
+}
+
+// getEncFileName 根据明文文件名计算对应的密文文件名（如 config.yaml -> system.enc, custom.yaml -> custom.enc）
+func (s *fileSourceWrapper) getEncFileName() string {
+	baseName := filepath.Base(s.absPath)
+	ext := filepath.Ext(baseName)
+	cleanName := strings.TrimSuffix(strings.TrimSuffix(baseName, ext), ".local")
+	if cleanName == "config" {
+		return filepath.Join(s.dir, "system.enc")
+	}
+	return filepath.Join(s.dir, cleanName+".enc")
+}
+
+// getPlainFileName 根据密文文件名和格式扩展名计算对应的明文文件名（如 system.enc + .yaml -> config.yaml, custom.enc + .yaml -> custom.yaml）
+func (s *fileSourceWrapper) getPlainFileName(ext string) string {
+	baseName := filepath.Base(s.absPath)
+	cleanName := strings.TrimSuffix(baseName, ".enc")
+	if cleanName == "system" {
+		return filepath.Join(s.dir, "config"+ext)
+	}
+	return filepath.Join(s.dir, cleanName+ext)
 }
 
 func (s *fileSourceWrapper) startWatch() {

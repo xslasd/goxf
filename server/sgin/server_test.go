@@ -27,7 +27,7 @@ server:
 `)
 	require.NoError(t, os.WriteFile(cfgFile, content, 0644))
 	t.Cleanup(func() { _ = os.Remove(cfgFile) })
-	require.NoError(t, conf.NewSourceConf(cfgFile, nil, false))
+	require.NoError(t, conf.LoadFromSource(cfgFile))
 }
 
 func TestNewGinServer_MaxMultipartMemory(t *testing.T) {

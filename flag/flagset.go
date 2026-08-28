@@ -20,6 +20,7 @@ type FlagSet struct {
 	flags           *pflag.FlagSet
 	persistentFlags *pflag.FlagSet
 	registeredFlags []Flag
+	appliedIndex    int
 	actions         map[string]func(string, *FlagSet)
 	environs        map[string]string // flagName -> envVar
 	parsed          bool
@@ -27,11 +28,16 @@ type FlagSet struct {
 
 // NewFlagSet creates a new FlagSet.
 func NewFlagSet(name string) *FlagSet {
+	flags := pflag.NewFlagSet(name, pflag.ContinueOnError)
+	flags.ParseErrorsAllowlist.UnknownFlags = true // 允许子命令专属参数放行给子命令自身解析
+	persistentFlags := pflag.NewFlagSet(name+"-persistent", pflag.ContinueOnError)
+	persistentFlags.ParseErrorsAllowlist.UnknownFlags = true
 	return &FlagSet{
 		name:            name,
-		flags:           pflag.NewFlagSet(name, pflag.ContinueOnError),
-		persistentFlags: pflag.NewFlagSet(name+"-persistent", pflag.ContinueOnError),
+		flags:           flags,
+		persistentFlags: persistentFlags,
 		registeredFlags: make([]Flag, 0),
+		appliedIndex:    0,
 		actions:         make(map[string]func(string, *FlagSet)),
 		environs:        make(map[string]string),
 	}
@@ -71,14 +77,19 @@ func (fs *FlagSet) Register(flags ...Flag) {
 	fs.mu.Unlock()
 }
 
-// applyAll applies all registered Flag objects to underlying pflags.
+// applyAll applies all unapplied registered Flag objects to underlying pflags.
 func (fs *FlagSet) applyAll() {
-	fs.mu.RLock()
-	flags := make([]Flag, len(fs.registeredFlags))
-	copy(flags, fs.registeredFlags)
-	fs.mu.RUnlock()
+	fs.mu.Lock()
+	if fs.appliedIndex >= len(fs.registeredFlags) {
+		fs.mu.Unlock()
+		return
+	}
+	toApply := make([]Flag, len(fs.registeredFlags)-fs.appliedIndex)
+	copy(toApply, fs.registeredFlags[fs.appliedIndex:])
+	fs.appliedIndex = len(fs.registeredFlags)
+	fs.mu.Unlock()
 
-	for _, f := range flags {
+	for _, f := range toApply {
 		f.Apply(fs)
 	}
 }

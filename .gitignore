@@ -30,3 +30,9 @@ Thumbs.db
 # Project local configs
 *.local.yaml
 *.local.json
+*.enc
+
+# Test artifacts
+*.pem
+ifile
+ofile

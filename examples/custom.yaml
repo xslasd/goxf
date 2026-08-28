@@ -1,0 +1,8 @@
+custom:
+    appName: "goxf-custom-app"
+    version: "v1.2.0"
+    debug: true
+    database:
+        host: "127.0.0.1"
+        port: 3306
+        username: "root"

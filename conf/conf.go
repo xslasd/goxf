@@ -28,11 +28,19 @@ type Conf struct {
 
 type Unmarshal func([]byte, any) error
 
-func NewConf() *Conf {
+func NewConf(opts ...Option) *Conf {
+	opt := defaultOptions()
+	for _, o := range opts {
+		o(opt)
+	}
+	delimiter := opt.keyDelimiter
+	if delimiter == "" {
+		delimiter = "."
+	}
 	return &Conf{
 		keysMap:      make(map[string]any),
 		watchers:     make(map[string]func(*Conf)),
-		keyDelimiter: ".",
+		keyDelimiter: delimiter,
 	}
 }
 
@@ -50,22 +58,31 @@ func (c *Conf) LoadFromConfigSource(ds ConfigSource, unmarshal Unmarshal) error 
 	if unmarshal == nil && dsFormat != "" {
 		unmarshal = ExtToUnmarshal(dsFormat)
 	}
+	if unmarshal == nil {
+		return UnmarshalInvalid
+	}
 
 	err = c.load(content, unmarshal)
 	if err != nil {
 		return err
 	}
-	go func() {
-		for range ds.Changed() {
-			if content, dsFmt, err := ds.ReadConfig(); err == nil {
-				um := unmarshal
-				if um == nil && dsFmt != "" {
-					um = ExtToUnmarshal(dsFmt)
+
+	// 仅在数据源开启了监听（Changed Channel 非空）时才启动后台热重载协程，防止 nil channel 导致协程永久泄漏
+	if ch := ds.Changed(); ch != nil {
+		go func() {
+			for range ch {
+				if content, dsFmt, err := ds.ReadConfig(); err == nil {
+					um := unmarshal
+					if um == nil && dsFmt != "" {
+						um = ExtToUnmarshal(dsFmt)
+					}
+					if um != nil {
+						_ = c.load(content, um)
+					}
 				}
-				_ = c.load(content, um)
 			}
-		}
-	}()
+		}()
+	}
 	return nil
 }
 
@@ -198,8 +215,8 @@ func (c *Conf) UnmarshalKey(key string, rawVal any) error {
 	return mapstructure.Decode(value, rawVal)
 }
 
-func verifyPassword(isEnc bool) bool {
-	if configPassword != "" {
+func verifyPassword(configAddr string, pwd string, cryptFn func(string) string, isEnc bool) bool {
+	if pwd != "" {
 		vPassword := false
 		for _, arg := range os.Args {
 			if arg == "--crypt-conf" || arg == "-e" {
@@ -209,36 +226,36 @@ func verifyPassword(isEnc bool) bool {
 		}
 		if vPassword {
 			fmt.Println()
-			fmt.Print("Enter config password: ")
-			var pwd string
+			fmt.Printf("Enter config password for [%s]: ", configAddr)
+			var inputPwd string
 			if term.IsTerminal(int(os.Stdin.Fd())) {
 				pwdBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Println()
 				if err != nil {
-					fmt.Printf("Failed to read password: %v\n", err)
+					fmt.Printf("Failed to read password for [%s]: %v\n", configAddr, err)
 					os.Exit(1)
 				}
-				pwd = string(pwdBytes)
+				inputPwd = string(pwdBytes)
 			} else {
-				fmt.Scanln(&pwd)
+				fmt.Scanln(&inputPwd)
 			}
 
-			if pwd == "" {
-				fmt.Println("Password cannot be empty")
+			if inputPwd == "" {
+				fmt.Printf("Password for [%s] cannot be empty\n", configAddr)
 				os.Exit(1)
 			}
-			checkPwd := pwd
-			if passwordCryptFunc != nil {
-				checkPwd = passwordCryptFunc(pwd)
+			checkPwd := inputPwd
+			if cryptFn != nil {
+				checkPwd = cryptFn(inputPwd)
 			}
-			if checkPwd != configPassword {
-				fmt.Println("Password is not correct")
+			if checkPwd != pwd {
+				fmt.Printf("Password for [%s] is not correct\n", configAddr)
 				os.Exit(1)
 			}
 			return true
 		}
 		if !isEnc {
-			fmt.Println("invalid config data decrypt failed")
+			fmt.Printf("invalid config data decrypt failed for [%s]\n", configAddr)
 			os.Exit(1)
 		}
 	}
