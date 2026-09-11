@@ -86,10 +86,8 @@ func TestBaseResStatusMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, res := BaseRes(nil, tt.err)
+			status, resData := BaseRes(nil, tt.err)
 			assert.Equal(t, tt.wantStatus, status)
-			resData, ok := res.(ResData)
-			assert.True(t, ok)
 			assert.Equal(t, tt.wantCode, resData.Code)
 		})
 	}
@@ -100,9 +98,8 @@ func TestBaseResCustomOptions(t *testing.T) {
 	customStatus := map[int]int{
 		-400: http.StatusUnprocessableEntity,
 	}
-	status, res := BaseRes("test", ecode.RequestErr, WithAddHTTPStatus(customStatus))
+	status, resData := BaseRes("test", ecode.RequestErr, WithAddHTTPStatus(customStatus))
 	assert.Equal(t, http.StatusUnprocessableEntity, status)
-	resData := res.(ResData)
 	assert.Equal(t, -400, resData.Code)
 	assert.Equal(t, "test", resData.Data)
 
