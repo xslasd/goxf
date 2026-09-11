@@ -12,6 +12,8 @@
 - **优雅启停**：支持优雅启动与关闭，保证服务平滑退出。
 - **服务注册与发现**：预留服务注册与发现接口，便于集成 Consul、Etcd 等注册中心。
 - **高性能日志**：集成 zap 日志库，支持异步日志、日志切割。
+- **高性能本地缓存**：内置 `cache/golanglru` 模块（基于 `hashicorp/golang-lru/v2`），提供泛型缓存抽象（`Cache[K, V]`），支持 LRU 与 2Q 替换算法、TTL 自动失效、Prometheus 监控埋点（`enableMetric`），并通过 `hooks` 自动托管生命周期。
+- **标准统一 API 响应**：`api.BaseRes` 提供规范化响应载荷，基于 `ecode` 错误码体系深度映射标准 HTTP 状态码（覆盖 401/403/400/404/500/503 等），并具备并发安全的字典隔离机制。
 - **国际化支持**：内置 i18n 国际化能力。
 - **钩子机制**：支持生命周期钩子，方便扩展和自定义行为。
 - **性能监控**：支持 pprof、metrics 等性能监控能力。
@@ -21,19 +23,23 @@
 
 ```
 .
+├── api/            # 统一响应封装与 HTTP 状态码映射
 ├── application/    # 运行时与应用管理
 ├── auth/           # 认证与鉴权
-├── client/         # 客户端相关
+├── cache/          # 高性能本地缓存 (golanglru: LRU / 2Q / TTL / Metric)
+├── client/         # 客户端相关 (Redis/Etcd/ArangoDB/gRPC/HTTP)
 ├── conf/           # 配置管理 (多实例/Options/加解密)
 ├── ecode/          # 错误码管理
-├── examples/       # 示例代码
+├── examples/       # 示例代码 (cache/cron/queue/i18n 等)
 ├── flag/           # 命令行参数与多子命令调度
 ├── hooks/          # 生命周期钩子
 ├── i18n/           # 国际化
 ├── job/            # 后台任务引擎 (cron/queue)
 ├── log/            # 日志系统
+├── metric/         # Prometheus 监控埋点
 ├── server/         # 服务端相关 (Gin/gRPC/SSE/WebSocket)
-├── util/           # 工具包
+├── tracer/         # 链路追踪 (Jaeger)
+├── utils/          # 工具包 (xrand/xcast/xfmt 等)
 ├── config.go       # 配置结构定义
 ├── go.mod          # Go 依赖管理
 ├── go.sum          # Go 依赖校验
@@ -99,14 +105,31 @@
    go run main.go migrate -c config.yaml
    ```
 
+5. **使用本地高速缓存 (`cache/golanglru`)**
+
+   ```go
+   // 基于配置初始化强类型泛型缓存 (支持 LRU / 2Q / TTL / Metric)
+   cache, err := golanglru.NewCache[string, string](
+       golanglru.WithConfName[string, string]("default"),
+   )
+
+   // 读写与过期自动剔除
+   cache.Set("user:1001", "Alice")
+   if val, ok := cache.Get("user:1001"); ok {
+       fmt.Println("命中缓存:", val)
+   }
+   ```
+
 ## 主要依赖
 
 - [gin-gonic/gin](https://github.com/gin-gonic/gin) - Web 框架
 - [go.uber.org/zap](https://github.com/uber-go/zap) - 日志库
 - [xorm.io/xorm](https://xorm.io/) - ORM 框架
 - [google.golang.org/grpc](https://grpc.io/) - gRPC
+- [github.com/hashicorp/golang-lru/v2](https://github.com/hashicorp/golang-lru) - 高性能泛型 LRU/2Q 内存缓存
 - [github.com/gorilla/websocket](https://github.com/gorilla/websocket) - WebSocket
-- [github.com/dgrijalva/jwt-go](https://github.com/dgrijalva/jwt-go) - JWT 认证
+- [github.com/golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) - JWT 认证
+- [github.com/spf13/cobra](https://github.com/spf13/cobra) - 现代化 CLI 引擎
 
 ## 贡献
 

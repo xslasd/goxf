@@ -6,6 +6,7 @@ const (
 	HTTPType       = "HTTP"
 	RedisType      = "Redis"
 	JobType        = "Job"
+	CacheType      = "Cache"
 )
 
 var (

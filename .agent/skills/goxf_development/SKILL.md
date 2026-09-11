@@ -60,7 +60,14 @@ When working on `goxf`, AI agents and developers must strictly adhere to the fol
         - `credis.QueueBroker`: High-availability distributed layout using Redis `ZSET` + `Lua Script Sweeper` for zero-loss delayed missions (e.g., *Order timeouts*).
     - **Usage**: Always call `worker.Enqueue(ctx, data)` or `worker.EnqueueAfter(ctx, data, delay)` directly from the Worker handle to trace metrics accurately.
 
-### 6. 标准脚手架支撑 (`i18n`, `ecode`, `util`)
+### 6. 本地缓存与统一响应 (`cache/golanglru`, `api`)
+- **`cache/golanglru`**: High-performance in-memory cache wrapper over `github.com/hashicorp/golang-lru/v2`.
+    - Strongly-typed generic interface (`Cache[K comparable, V any]`) and convenient `golanglru.New(...)`.
+    - Configurations: `name`, `size`, `expiration` (TTL, supports human-friendly duration strings like `"30m"`), `algorithm` (`lru` default or `2q`), `enableMetric` (Prometheus monitoring via `metric.ClientHandleCounter` / `metric.ClientHandleHistogram`).
+    - Lifecycle managed via `hooks.Stage_AfterStop`.
+- **`api`**: Standardized response wrapper (`api.BaseRes`) and semantic HTTP status code mapping (`CodeToHTTPStatus`) eliminating magic numbers, fully mapped against `ecode/common_ecode.go` with safe map isolation against concurrent mutations.
+
+### 7. 标准脚手架支撑 (`i18n`, `ecode`, `util`)
 - **i18n**: International language mapper.
 - **ecode**: Global business error codes registry carrying underlying stack traces.
 - **util**: Everyday formatters (`xfmt`), security helpers, and strings utilities.
