@@ -7,7 +7,7 @@ import (
 
 const (
 	// GoxfVersion 当前 goxf 框架核心版本号
-	GoxfVersion = "v0.5.0"
+	GoxfVersion = "v0.6.2"
 
 	// TraceContextHeaderName trace-id
 	TraceContextHeaderName = "x-trace-id"
